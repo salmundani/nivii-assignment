@@ -1,0 +1,5 @@
+flask>=3.0.0
+psycopg>=3.0.0
+celery>=5.3.0
+redis>=5.0.0
+openai>=1.0.0

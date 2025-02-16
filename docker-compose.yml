@@ -1,0 +1,73 @@
+services:
+  postgres:
+    image: postgres:17
+    expose:
+      - "5432"
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d
+
+  redis:
+    image: redis:alpine
+    expose:
+      - "6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
+  ollama:
+    image: ollama/ollama
+    container_name: ollama
+    expose:
+      - "11434"
+    volumes:
+      - ollama_data:/root/.ollama
+      - ./ollama_entrypoint.sh:/entrypoint.sh
+    env_file: .env
+    entrypoint: [ "/usr/bin/bash", "/entrypoint.sh" ]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+
+  api:
+    build:
+      context: ./api
+    ports:
+      - "5000:5000"
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      ollama:
+        condition: service_started
+
+  worker:
+    build:
+      context: ./api
+    env_file: .env
+    user: nobody
+    command: celery -A wsgi.celery_app worker --loglevel=info
+    depends_on:
+      - redis
+      - postgres
+      - ollama
+
+volumes:
+  postgres_data:
+  ollama_data:
+  redis_data:
