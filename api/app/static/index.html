@@ -93,6 +93,14 @@
             display: flex;
             align-items: center;
         }
+
+        .char-count {
+            color: #666;
+            font-size: 0.8em;
+            text-align: right;
+            margin-top: -8px;
+            margin-bottom: 8px;
+        }
     </style>
 </head>
 
@@ -100,7 +108,14 @@
     <h1>Ask Your Database</h1>
     <div class="form-group">
         <label for="query">Enter your question:</label><br>
-        <textarea id="query" placeholder="e.g., What is the most bought product?"></textarea><br>
+        <textarea 
+            id="query" 
+            placeholder="e.g., What is the most bought product?" 
+            maxlength="500"
+            onkeyup="updateCharCount()"
+            required
+        ></textarea>
+        <div class="char-count">0/500 characters</div>
         <div class="button-group">
             <div class="button-with-spinner">
                 <button id="queryBtn" onclick="streamQuery()">Query</button>
@@ -113,10 +128,16 @@
     <script>
         // Streaming method
         async function streamQuery() {
-            const query = document.getElementById('query').value;
+            const query = document.getElementById('query').value.trim();
             const resultDiv = document.getElementById('result');
             const queryBtn = document.getElementById('queryBtn');
             const spinner = document.getElementById('spinner');
+
+            // Validate empty input
+            if (!query) {
+                resultDiv.textContent = 'Error: Please enter a question';
+                return;
+            }
 
             // Show loading state
             queryBtn.disabled = true;
@@ -135,46 +156,46 @@
             const encodedQuery = encodeURIComponent(query);
             window.eventSource = new EventSource(`/query?question=${encodedQuery}`);
 
-            // Handle incoming messages
             window.eventSource.onmessage = (event) => {
-                if (event.data === '[DONE SQL]') {
+                resultDiv.textContent += event.data;
+                if (addNewLine) {
+                    resultDiv.textContent += '\n';
+                }
+            };
+            window.eventSource.addEventListener('done', (event) => {
+                if (event.data === 'SQL') {
                     prevText = resultDiv.textContent
                     resultDiv.textContent += '\n\n# Fetching rows...\n';
                     addNewLine = true;
-                }
-                else if (event.data === '[DONE ROWS]') {
+                } else if (event.data === 'ROWS') {
                     prevText = resultDiv.textContent
                     resultDiv.textContent += '\n# Answer:\n';
                     addNewLine = false;
-                }
-                else if (event.data === '[DONE]') {
+                } else if (event.data === 'ALL') {
                     window.eventSource.close();
                     // Reset loading state
                     queryBtn.disabled = false;
                     spinner.style.display = 'none';
                     return;
                 }
-                else if (event.data.startsWith('Error')) {
-                    if (event.data.startsWith('Error SQL')) {
-                        resultDiv.textContent = '\n\nThere was an error generating the SQL query: ' + event.data.split('Error SQL:')[1];
-                    } else if (event.data.startsWith('Error ROWS')) {
-                        resultDiv.textContent = prevText + '\n\nThere was an error fetching the rows: ' + event.data.split('Error ROWS:')[1];
-                    } else {
-                        resultDiv.textContent = prevText + '\n\nThere was an error generating the answer: ' + event.data.split('Error TEXT:')[1];
-                    }
-                    window.eventSource.close();
-                    // Reset loading state on error
-                    queryBtn.disabled = false;
-                    spinner.style.display = 'none';
-                    return;
+            });
+            window.eventSource.onerror = (error) => {
+                window.eventSource.close();
+                if (error.data) {
+                    resultDiv.textContent = prevText + '\n\n' + error.data + '. Please try again.';
+                } else {
+                    resultDiv.textContent = "An error occurred while processing your request. Please try again.";
                 }
-                else {
-                    resultDiv.textContent += event.data;
-                    if (addNewLine) {
-                        resultDiv.textContent += '\n';
-                    }
-                }
+                queryBtn.disabled = false;
+                spinner.style.display = 'none';
             };
+        }
+
+        function updateCharCount() {
+            const textarea = document.getElementById('query');
+            const count = textarea.value.length;
+            document.querySelector('.char-count').textContent = 
+                `${count}/500 characters`;
         }
     </script>
 </body>

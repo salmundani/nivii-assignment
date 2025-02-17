@@ -15,7 +15,9 @@ class OllamaService:
         # TODO this is the suggested prompt and temperature for llama-3-sqlcoder-8b, might not be the best for other models
         user_prompt = f"""
             Generate a SQL query to answer this question: `{question}`
-            Use PostgreSQL syntax. Unless specified, prefer selecting more descriptive columns instead of serial identifiers when possible.
+            - Use PostgreSQL syntax.
+            - Unless specified, prefer selecting more descriptive columns instead of serial identifiers when possible.
+            - When the question includes a superlative adjective (e.g. most, least, highest, lowest, etc.), prefer sorting them by the relevant column and selecting the top 10 rows (i.e. LIMIT 10).
 
             DDL statements:
             {schema}

@@ -92,7 +92,7 @@ class DatabaseManager:
                     rows = cur.fetchall()
 
                 if not rows:
-                    return "No results found"
+                    return []
 
                 headers = list(rows[0].keys())
                 csv_lines = [",".join(headers)]

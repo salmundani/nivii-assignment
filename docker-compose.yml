@@ -40,6 +40,7 @@ services:
     ports:
       - "80:80"
     env_file: .env
+    # FIXME: the web app is starting before the database and ollama are ready
     depends_on:
       postgres:
         condition: service_healthy
