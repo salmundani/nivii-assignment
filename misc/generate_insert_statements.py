@@ -30,10 +30,10 @@ with open("../db/init/02-populate-data.sql", "w") as sql_file:
                 product_id += 1
                 products[product_name] = product_id
             if ticket not in tickets:
-                date_ = format_date(row[0]) + " " + row[2] + ":00"
+                datetime = format_date(row[0]) + " " + row[2] + ":00"
                 waiter = row[4]
                 sql_file.write(
-                    f"INSERT INTO orders (date, ticket, waiter) VALUES ('{date_}', '{ticket}', '{waiter}');\n"
+                    f"INSERT INTO orders (datetime, ticket, waiter) VALUES ('{datetime}', '{ticket}', '{waiter}');\n"
                 )
                 ticket_id += 1
                 tickets[ticket] = ticket_id

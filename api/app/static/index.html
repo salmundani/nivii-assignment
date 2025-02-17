@@ -2,7 +2,7 @@
 <html>
 
 <head>
-    <title>Text to SQL</title>
+    <title>Ask Your Database</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -27,17 +27,10 @@
 
         #result {
             white-space: pre-wrap;
-            background: #1e1e1e;  /* Dark background */
-            color: #d4d4d4;       /* Light gray text */
-            padding: 15px;
-            border-radius: 6px;
-            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-            font-size: 14px;
-            line-height: 1.5;
-            border: 1px solid #333;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            overflow-x: auto;      /* Horizontal scroll if needed */
-            min-height: 100px;     /* Minimum height */
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
         }
 
         .button-group {
@@ -65,69 +58,73 @@
             font-style: italic;
             margin-bottom: 10px;
         }
+
+        /* Loading spinner */
+        .spinner {
+            display: none;
+            /* Hidden by default */
+            width: 20px;
+            height: 20px;
+            margin-left: 10px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #007bff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Style for disabled button */
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        /* Flex container for button and spinner */
+        .button-with-spinner {
+            display: flex;
+            align-items: center;
+        }
     </style>
 </head>
 
 <body>
-    <h1>SQL Query Generator</h1>
+    <h1>Ask Your Database</h1>
     <div class="form-group">
         <label for="query">Enter your question:</label><br>
         <textarea id="query" placeholder="e.g., What is the most bought product?"></textarea><br>
         <div class="button-group">
-            <button onclick="submitQuery()">Generate SQL (Poll)</button>
-            <button onclick="streamQuery()">Generate SQL (Stream)</button>
+            <div class="button-with-spinner">
+                <button id="queryBtn" onclick="streamQuery()">Query</button>
+                <div id="spinner" class="spinner"></div>
+            </div>
         </div>
     </div>
     <div id="result"></div>
 
     <script>
-        async function submitQuery() {
-            const query = document.getElementById('query').value;
-            const resultDiv = document.getElementById('result');
-
-            try {
-                // Submit the query
-                const response = await fetch('/tasks', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ query: query })
-                });
-                const data = await response.json();
-                
-                // Show "Processing..." message
-                resultDiv.textContent = 'Processing...';
-
-                // Poll for results
-                while (true) {
-                    const statusResponse = await fetch(`/tasks/${data.task_id}`);
-                    const statusData = await statusResponse.json();
-
-                    if (statusData.status === 'completed') {
-                        resultDiv.textContent = statusData.result;
-                        break;
-                    } else if (statusData.status === 'failed') {
-                        resultDiv.textContent = `Error: ${statusData.error}`;
-                        break;
-                    }
-
-                    // Wait before polling again
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                }
-            } catch (error) {
-                resultDiv.textContent = `Error: ${error.message}`;
-            }
-        }
-
         // Streaming method
         async function streamQuery() {
             const query = document.getElementById('query').value;
             const resultDiv = document.getElementById('result');
+            const queryBtn = document.getElementById('queryBtn');
+            const spinner = document.getElementById('spinner');
 
-            // Clear previous results
-            resultDiv.textContent = '';
-            let fullResponse = '';
+            // Show loading state
+            queryBtn.disabled = true;
+            spinner.style.display = 'block';
+
+            resultDiv.textContent = '# Creating SQL query...\n';
+            let prevText = '';
+            let addNewLine = false;
 
             // Close existing EventSource if any
             if (window.eventSource) {
@@ -136,21 +133,47 @@
 
             // Create new EventSource
             const encodedQuery = encodeURIComponent(query);
-            window.eventSource = new EventSource(`/stream?query=${encodedQuery}`);
+            window.eventSource = new EventSource(`/query?question=${encodedQuery}`);
 
             // Handle incoming messages
             window.eventSource.onmessage = (event) => {
-                if (event.data === '[DONE]') {
+                if (event.data === '[DONE SQL]') {
+                    prevText = resultDiv.textContent
+                    resultDiv.textContent += '\n\n# Fetching rows...\n';
+                    addNewLine = true;
+                }
+                else if (event.data === '[DONE ROWS]') {
+                    prevText = resultDiv.textContent
+                    resultDiv.textContent += '\n# Answer:\n';
+                    addNewLine = false;
+                }
+                else if (event.data === '[DONE]') {
                     window.eventSource.close();
+                    // Reset loading state
+                    queryBtn.disabled = false;
+                    spinner.style.display = 'none';
                     return;
                 }
-                if (event.data.startsWith('Error:')) {
-                    resultDiv.textContent = event.data;
+                else if (event.data.startsWith('Error')) {
+                    if (event.data.startsWith('Error SQL')) {
+                        resultDiv.textContent = '\n\nThere was an error generating the SQL query: ' + event.data.split('Error SQL:')[1];
+                    } else if (event.data.startsWith('Error ROWS')) {
+                        resultDiv.textContent = prevText + '\n\nThere was an error fetching the rows: ' + event.data.split('Error ROWS:')[1];
+                    } else {
+                        resultDiv.textContent = prevText + '\n\nThere was an error generating the answer: ' + event.data.split('Error TEXT:')[1];
+                    }
                     window.eventSource.close();
+                    // Reset loading state on error
+                    queryBtn.disabled = false;
+                    spinner.style.display = 'none';
                     return;
                 }
-                fullResponse += event.data;
-                resultDiv.textContent = fullResponse;
+                else {
+                    resultDiv.textContent += event.data;
+                    if (addNewLine) {
+                        resultDiv.textContent += '\n';
+                    }
+                }
             };
         }
     </script>

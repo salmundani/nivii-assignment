@@ -6,7 +6,7 @@ create table products (
 create table orders (
     id SERIAL primary key,
     ticket varchar(255) not null,
-    date TIMESTAMP not null,
+    datetime TIMESTAMP not null,
     waiter integer not null
 );
 
