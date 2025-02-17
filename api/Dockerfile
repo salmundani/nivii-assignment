@@ -1,6 +1,6 @@
 FROM python:3.12-slim
 
-WORKDIR /app
+WORKDIR /code
 
 RUN apt-get update && \
     apt-get install -y libpq-dev gcc && \
@@ -9,8 +9,7 @@ RUN apt-get update && \
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
-COPY *.py .
+COPY ./app /code/app/
+EXPOSE 80
 
-EXPOSE 5000
-
-CMD ["flask", "run", "--host", "0.0.0.0"]
+CMD ["fastapi", "run", "app/main.py", "--port", "80"]

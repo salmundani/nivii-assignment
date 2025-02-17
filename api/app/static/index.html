@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Text to SQL</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        textarea {
+            width: 100%;
+            height: 100px;
+            margin-bottom: 10px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-family: inherit;
+        }
+
+        #result {
+            white-space: pre-wrap;
+            background: #1e1e1e;  /* Dark background */
+            color: #d4d4d4;       /* Light gray text */
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            border: 1px solid #333;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow-x: auto;      /* Horizontal scroll if needed */
+            min-height: 100px;     /* Minimum height */
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        .status {
+            color: #666;
+            font-style: italic;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>SQL Query Generator</h1>
+    <div class="form-group">
+        <label for="query">Enter your question:</label><br>
+        <textarea id="query" placeholder="e.g., What is the most bought product?"></textarea><br>
+        <div class="button-group">
+            <button onclick="submitQuery()">Generate SQL (Poll)</button>
+            <button onclick="streamQuery()">Generate SQL (Stream)</button>
+        </div>
+    </div>
+    <div id="result"></div>
+
+    <script>
+        async function submitQuery() {
+            const query = document.getElementById('query').value;
+            const resultDiv = document.getElementById('result');
+
+            try {
+                // Submit the query
+                const response = await fetch('/tasks', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ query: query })
+                });
+                const data = await response.json();
+                
+                // Show "Processing..." message
+                resultDiv.textContent = 'Processing...';
+
+                // Poll for results
+                while (true) {
+                    const statusResponse = await fetch(`/tasks/${data.task_id}`);
+                    const statusData = await statusResponse.json();
+
+                    if (statusData.status === 'completed') {
+                        resultDiv.textContent = statusData.result;
+                        break;
+                    } else if (statusData.status === 'failed') {
+                        resultDiv.textContent = `Error: ${statusData.error}`;
+                        break;
+                    }
+
+                    // Wait before polling again
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            } catch (error) {
+                resultDiv.textContent = `Error: ${error.message}`;
+            }
+        }
+
+        // Streaming method
+        async function streamQuery() {
+            const query = document.getElementById('query').value;
+            const resultDiv = document.getElementById('result');
+
+            // Clear previous results
+            resultDiv.textContent = '';
+            let fullResponse = '';
+
+            // Close existing EventSource if any
+            if (window.eventSource) {
+                window.eventSource.close();
+            }
+
+            // Create new EventSource
+            const encodedQuery = encodeURIComponent(query);
+            window.eventSource = new EventSource(`/stream?query=${encodedQuery}`);
+
+            // Handle incoming messages
+            window.eventSource.onmessage = (event) => {
+                if (event.data === '[DONE]') {
+                    window.eventSource.close();
+                    return;
+                }
+                if (event.data.startsWith('Error:')) {
+                    resultDiv.textContent = event.data;
+                    window.eventSource.close();
+                    return;
+                }
+                fullResponse += event.data;
+                resultDiv.textContent = fullResponse;
+            };
+        }
+    </script>
+</body>
+
+</html>
